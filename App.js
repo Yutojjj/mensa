@@ -238,7 +238,6 @@ export default function App() {
         throw new Error(result.message);
       }
     } catch (e) {
-  // e.message を表示させることで、原因が「ネットワーク」か「GASの拒否」か分かります
   setSubmitError("エラー詳細: " + e.message); 
   console.error(e);
     } finally {
