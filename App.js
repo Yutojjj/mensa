@@ -13,7 +13,11 @@ import {
   Alert,
   Modal,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
+
+// --- 設定 ---
+const GAS_URL = "ここにデプロイしたURLを貼り付けてください";
 
 // --- 共通コンポーネント ---
 const Section = ({ title, children }) => (
@@ -45,10 +49,8 @@ const InputField = ({
   </View>
 );
 
-// --- ドロップダウン用コンポーネント ---
 const DropdownSelector = ({ label, options, selectedValue, onSelect, error, required, flex = 1 }) => {
   const [modalVisible, setModalVisible] = useState(false);
-
   return (
     <View style={[styles.inputContainer, { flex }]}>
       <View style={styles.labelRow}>
@@ -63,27 +65,17 @@ const DropdownSelector = ({ label, options, selectedValue, onSelect, error, requ
           {selectedValue || "選択 ▼"}
         </Text>
       </TouchableOpacity>
-
       <Modal transparent={true} visible={modalVisible} animationType="slide">
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setModalVisible(false)}
-        >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{label}を選択</Text>
-            </View>
+            <View style={styles.modalHeader}><Text style={styles.modalTitle}>{label}を選択</Text></View>
             <FlatList
               data={options}
               keyExtractor={(item) => item.toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity 
                   style={styles.modalItem} 
-                  onPress={() => {
-                    onSelect(item.toString());
-                    setModalVisible(false);
-                  }}
+                  onPress={() => { onSelect(item.toString()); setModalVisible(false); }}
                 >
                   <Text style={styles.modalItemText}>{item}</Text>
                   {selectedValue === item.toString() && <Text style={styles.checkmark}>✓</Text>}
@@ -156,10 +148,9 @@ const WorkHistoryCard = ({ symbol }) => (
   </View>
 );
 
+// --- メインコンポーネント ---
 export default function App() {
-  const [isAgreed, setIsAgreed] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [form, setForm] = useState({
+  const initialState = {
     name: '', kana: '', gender: '', bloodType: '',
     birthYear: '', birthMonth: '', birthDay: '', 
     age: '', zodiac: '', 
@@ -172,10 +163,15 @@ export default function App() {
     applyMethod: '', applyMethodCustom: '', introducer: '', 
     daysPerWeek: '', availableDays: [], workTime: '', workTimeCustom: '',
     debt: '', transport: '', transportCustom: '', tattoo: '', tattooDetail: ''
-  });
-  const [errors, setErrors] = useState({});
+  };
 
-  // 各種選択肢の生成
+  const [form, setForm] = useState(initialState);
+  const [errors, setErrors] = useState({});
+  const [isAgreed, setIsAgreed] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const currentYear = 2026;
   const years = Array.from({ length: 61 }, (_, i) => (currentYear - 18 - i).toString());
   const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
@@ -184,16 +180,11 @@ export default function App() {
 
   const updateField = (key, value) => {
     let newForm = { ...form, [key]: value };
-    if (key === 'hireCondition') {
-        newForm.workTime = '';
-        newForm.workTimeCustom = '';
-    }
-    if (key === 'applyMethod' && !['紹介', 'WARPスタッフの紹介'].includes(value)) {
-        newForm.introducer = '';
-    }
+    if (key === 'hireCondition') { newForm.workTime = ''; newForm.workTimeCustom = ''; }
+    if (key === 'applyMethod' && !['紹介', 'WARPスタッフの紹介'].includes(value)) { newForm.introducer = ''; }
     setForm(newForm);
     if (value && value.toString().trim() !== '') {
-      setErrors({ ...errors, [key]: false });
+      setErrors(prev => ({ ...prev, [key]: false }));
     }
     setSubmitError("");
   };
@@ -221,7 +212,6 @@ export default function App() {
 
     if (form.language.length === 0) newErrors.language = true;
     if (form.availableDays.length === 0) newErrors.availableDays = true;
-
     if (form.livingStatus === 'その他' && !form.livingStatusCustom) newErrors.livingStatusCustom = true;
     if (form.applyMethod === 'その他' && !form.applyMethodCustom) newErrors.applyMethodCustom = true;
     if (['紹介', 'WARPスタッフの紹介'].includes(form.applyMethod) && !form.introducer) newErrors.introducer = true;
@@ -234,14 +224,53 @@ export default function App() {
     }
     if (!isAgreed) { setSubmitError("同意スイッチをオンにしてください。"); return; }
 
+    setLoading(true);
     try {
-        // ここにfetchなどの送信処理
-        Alert.alert("送信完了", "内容が保存されました。");
+      const response = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        setIsSubmitted(true);
+      } else {
+        throw new Error(result.message);
+      }
     } catch (e) {
-        setSubmitError("送信に失敗しました。電波の良い場所で再度お試しください。");
+      setSubmitError("送信に失敗しました。URLの設定や通信環境を確認してください。");
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // --- 送信完了画面 ---
+  if (isSubmitted) {
+    return (
+      <SafeAreaView style={[styles.safeArea, styles.centered]}>
+        <View style={styles.successCard}>
+          <Text style={styles.successIcon}>✅</Text>
+          <Text style={styles.successTitle}>送信が完了しました</Text>
+          <Text style={styles.successText}>
+            エントリーシートの送信ありがとうございます。{"\n"}内容を確認次第、担当よりご連絡いたします。
+          </Text>
+          <TouchableOpacity 
+            style={styles.submitButton} 
+            onPress={() => {
+              setForm(initialState);
+              setIsSubmitted(false);
+              setIsAgreed(false);
+            }}
+          >
+            <Text style={styles.submitButtonText}>トップに戻る</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- 入力画面 ---
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}>
@@ -251,57 +280,39 @@ export default function App() {
           <Section title="基本情報">
             <InputField label="お名前" placeholder="例：山田 花子" required value={form.name} onChangeText={(v) => updateField('name', v)} error={errors.name} />
             <InputField label="かな" placeholder="例：やまだ はなこ" required value={form.kana} onChangeText={(v) => updateField('kana', v)} error={errors.kana} />
-            
             <View style={styles.row}>
               <SelectButtons label="性別" options={['男性', '女性']} required selectedValue={form.gender} onSelect={(v) => updateField('gender', v)} error={errors.gender} />
               <View style={{ width: 10 }} />
               <SelectButtons label="血液型" options={['A型', 'B型', 'O型', 'AB型']} required selectedValue={form.bloodType} onSelect={(v) => updateField('bloodType', v)} error={errors.bloodType} />
             </View>
-
-            <View style={styles.labelRow}>
-                <Text style={styles.label}>生年月日</Text>
-                <Text style={styles.requiredTag}>必須</Text>
-            </View>
+            <View style={styles.labelRow}><Text style={styles.label}>生年月日</Text><Text style={styles.requiredTag}>必須</Text></View>
             <View style={styles.row}>
               <DropdownSelector options={years} selectedValue={form.birthYear} onSelect={(v) => updateField('birthYear', v)} error={errors.birthYear} label="年" />
-              <View style={{ width: 5 }} />
-              <DropdownSelector options={months} selectedValue={form.birthMonth} onSelect={(v) => updateField('birthMonth', v)} error={errors.birthMonth} label="月" />
-              <View style={{ width: 5 }} />
-              <DropdownSelector options={days} selectedValue={form.birthDay} onSelect={(v) => updateField('birthDay', v)} error={errors.birthDay} label="日" />
+              <View style={{ width: 5 }} /><DropdownSelector options={months} selectedValue={form.birthMonth} onSelect={(v) => updateField('birthMonth', v)} error={errors.birthMonth} label="月" />
+              <View style={{ width: 5 }} /><DropdownSelector options={days} selectedValue={form.birthDay} onSelect={(v) => updateField('birthDay', v)} error={errors.birthDay} label="日" />
             </View>
-            
             <View style={styles.row}>
               <InputField label="年齢" placeholder="例：25" required keyboardType="numeric" value={form.age} onChangeText={(v) => updateField('age', v)} error={errors.age} flex={1} />
-              <View style={{ width: 10 }} />
-              <DropdownSelector label="干支" options={zodiacOptions} required selectedValue={form.zodiac} onSelect={(v) => updateField('zodiac', v)} error={errors.zodiac} flex={1.5} />
+              <View style={{ width: 10 }} /><DropdownSelector label="干支" options={zodiacOptions} required selectedValue={form.zodiac} onSelect={(v) => updateField('zodiac', v)} error={errors.zodiac} flex={1.5} />
             </View>
-
             <InputField label="携帯番号" placeholder="09012345678" keyboardType="phone-pad" required value={form.phone} onChangeText={(v) => updateField('phone', v)} error={errors.phone} />
             <InputField label="現住所" placeholder="マンション名まで正確に" multiline required value={form.address} onChangeText={(v) => updateField('address', v)} error={errors.address} />
             <InputField label="本籍地" placeholder="都道府県名から" required value={form.domicile} onChangeText={(v) => updateField('domicile', v)} error={errors.domicile} />
             <View style={styles.row}>
               <InputField label="身長" placeholder="160cm" value={form.height} onChangeText={(v) => updateField('height', v)} />
-              <View style={{ width: 10 }} />
-              <InputField label="体重" placeholder="48kg" value={form.weight} onChangeText={(v) => updateField('weight', v)} />
+              <View style={{ width: 10 }} /><InputField label="体重" placeholder="48kg" value={form.weight} onChangeText={(v) => updateField('weight', v)} />
             </View>
           </Section>
 
           <Section title="詳細情報">
             <SelectButtons label="現在の職業 [日中]" options={['学生', 'フリーター', '会社員', 'なし']} required selectedValue={form.jobDay} onSelect={(v) => updateField('jobDay', v)} error={errors.jobDay} />
             <SelectButtons label="現在の職業 [夜間]" options={['キャバクラ等', 'なし']} required selectedValue={form.jobNight} onSelect={(v) => updateField('jobNight', v)} error={errors.jobNight} />
-            
             <SelectButtons label="お住まい" options={['実家', '一人暮らし', 'その他']} required selectedValue={form.livingStatus} onSelect={(v) => updateField('livingStatus', v)} error={errors.livingStatus} />
-            {form.livingStatus === 'その他' && (
-              <InputField label="具体的な住まい" placeholder="例：寮" required value={form.livingStatusCustom} onChangeText={(v) => updateField('livingStatusCustom', v)} error={errors.livingStatusCustom} />
-            )}
-
+            {form.livingStatus === 'その他' && <InputField label="具体的な住まい" placeholder="例：寮" required value={form.livingStatusCustom} onChangeText={(v) => updateField('livingStatusCustom', v)} error={errors.livingStatusCustom} />}
             <InputField label="学校名.学年/最終学歴" placeholder="〇〇大学 卒業" required value={form.education} onChangeText={(v) => updateField('education', v)} error={errors.education} />
             <SelectButtons label="夜職の経験" options={['ある', 'ない']} required selectedValue={form.nightJobExp} onSelect={(v) => updateField('nightJobExp', v)} error={errors.nightJobExp} />
-            
             <MultiSelectButtons label="語学" options={['日本語のみ', '英語', '中国語', 'その他']} required selectedValues={form.language} onToggle={(v) => toggleMulti('language', v)} error={errors.language} />
-            {form.language.includes('その他') && (
-              <InputField label="具体的な語学" placeholder="例：韓国語" value={form.languageCustom} onChangeText={(v) => updateField('languageCustom', v)} />
-            )}
+            {form.language.includes('その他') && <InputField label="具体的な語学" placeholder="例：韓国語" value={form.languageCustom} onChangeText={(v) => updateField('languageCustom', v)} />}
           </Section>
 
           <Section title="緊急連絡先">
@@ -313,31 +324,15 @@ export default function App() {
 
           <Section title="勤務条件・希望">
             <SelectButtons label="採用条件" options={['社員', 'アルバイト']} required selectedValue={form.hireCondition} onSelect={(v) => updateField('hireCondition', v)} error={errors.hireCondition} />
-            
             <SelectButtons label="応募方法" options={['紹介', 'WARPスタッフの紹介', '求人広告', 'その他']} required selectedValue={form.applyMethod} onSelect={(v) => updateField('applyMethod', v)} error={errors.applyMethod} />
-            {['紹介', 'WARPスタッフの紹介'].includes(form.applyMethod) && (
-                <InputField label="紹介者名" placeholder="フルネームで入力してください" required value={form.introducer} onChangeText={(v) => updateField('introducer', v)} error={errors.introducer} />
-            )}
+            {['紹介', 'WARPスタッフの紹介'].includes(form.applyMethod) && <InputField label="紹介者名" placeholder="フルネームで入力してください" required value={form.introducer} onChangeText={(v) => updateField('introducer', v)} error={errors.introducer} />}
             {form.applyMethod === 'その他' && <InputField label="具体的な応募経由" placeholder="SNS名など" required value={form.applyMethodCustom} onChangeText={(v) => updateField('applyMethodCustom', v)} error={errors.applyMethodCustom} />}
-            
             <SelectButtons label="週何回入れますか" options={['ほぼ毎日', '週4-5', '週2-3', '週0-1']} required selectedValue={form.daysPerWeek} onSelect={(v) => updateField('daysPerWeek', v)} error={errors.daysPerWeek} />
             <MultiSelectButtons label="何曜日入れますか" options={['月', '火', '水', '木', '金', '土', '日']} required selectedValues={form.availableDays} onToggle={(v) => toggleMulti('availableDays', v)} error={errors.availableDays} />
-            
             {form.hireCondition !== '' && (
               <View style={styles.dynamicSection}>
-                <View style={styles.workTimeHeader}>
-                    <Text style={styles.workTimeNotice}>
-                        {form.hireCondition === '社員' ? '※社員は17時からの勤務になります' : '※アルバイトは19時からの勤務になります'}
-                    </Text>
-                </View>
-                <SelectButtons 
-                    label="勤務時間" 
-                    options={form.hireCondition === '社員' ? ['未定','17時-ラスト', 'その他'] : ['未定','19時-ラスト', 'その他']} 
-                    required 
-                    selectedValue={form.workTime} 
-                    onSelect={(v) => updateField('workTime', v)} 
-                    error={errors.workTime} 
-                />
+                <View style={styles.workTimeHeader}><Text style={styles.workTimeNotice}>{form.hireCondition === '社員' ? '※社員は17時からの勤務になります' : '※アルバイトは19時からの勤務になります'}</Text></View>
+                <SelectButtons label="勤務時間" options={form.hireCondition === '社員' ? ['未定','17時-ラスト', 'その他'] : ['未定','19時-ラスト', 'その他']} required selectedValue={form.workTime} onSelect={(v) => updateField('workTime', v)} error={errors.workTime} />
                 {form.workTime === 'その他' && <InputField label="具体的な時間" required value={form.workTimeCustom} onChangeText={(v) => updateField('workTimeCustom', v)} error={errors.workTimeCustom} />}
               </View>
             )}
@@ -361,18 +356,14 @@ export default function App() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.submitButton, (!isAgreed || submitError !== "") && styles.submitButtonDisabled]} 
+            style={[styles.submitButton, (!isAgreed || loading) && styles.submitButtonDisabled]} 
             onPress={handleViewSubmit}
+            disabled={loading}
           >
-            <Text style={styles.submitButtonText}>内容を確認して送信</Text>
+            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>内容を確認して送信</Text>}
           </TouchableOpacity>
 
-          {submitError !== "" && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>⚠️ {submitError}</Text>
-            </View>
-          )}
-
+          {submitError !== "" && <View style={styles.errorBanner}><Text style={styles.errorBannerText}>⚠️ {submitError}</Text></View>}
           <View style={{ height: 60 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -382,6 +373,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8F9FA' },
+  centered: { justifyContent: 'center', alignItems: 'center', padding: 20 },
   header: { paddingVertical: 20, backgroundColor: '#fff', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   scrollView: { flex: 1 },
@@ -423,4 +415,9 @@ const styles = StyleSheet.create({
   errorBannerText: { color: '#FF3B30', fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   historyCard: { backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, marginBottom: 15, borderWidth: 1, borderColor: '#ECEEF1' },
   historyLabel: { fontSize: 14, fontWeight: 'bold', color: '#444', marginBottom: 10 },
+  // 送信完了用スタイル
+  successCard: { backgroundColor: '#fff', padding: 30, borderRadius: 20, alignItems: 'center', elevation: 5, width: '100%' },
+  successIcon: { fontSize: 60, marginBottom: 20 },
+  successTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 15 },
+  successText: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 30 },
 });
