@@ -238,8 +238,9 @@ export default function App() {
         throw new Error(result.message);
       }
     } catch (e) {
-      setSubmitError("送信に失敗しました。URLの設定や通信環境を確認してください。");
-      console.error(e);
+  // e.message を表示させることで、原因が「ネットワーク」か「GASの拒否」か分かります
+  setSubmitError("エラー詳細: " + e.message); 
+  console.error(e);
     } finally {
       setLoading(false);
     }
