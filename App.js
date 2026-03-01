@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 
 // --- 設定 ---
-const GAS_URL = "ここにデプロイしたURLを貼り付けてください";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxoc02ZVkc_70fuc_dyfA4KnNzEFRZnKeV-YnjyGIEczLYxdoTmkdcb9G7t9doFt4OG0A/exec";
 
 // --- 共通コンポーネント ---
 const Section = ({ title, children }) => (
